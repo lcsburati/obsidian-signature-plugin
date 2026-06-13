@@ -1,0 +1,125 @@
+/* ══════════════════════════════════════════════════════
+   obsidian-signature — stylesheet
+   Uses only Obsidian CSS variables for full theme compat.
+   ══════════════════════════════════════════════════════ */
+
+/* ── Placeholder [signature] / [assinatura] / [签名] ──── */
+
+.sig-placeholder {
+  color: var(--text-accent);
+  background-color: color-mix(in srgb, var(--text-accent) 10%, transparent);
+  border-radius: 3px;
+  padding: 1px 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+}
+
+.sig-placeholder:hover {
+  background-color: color-mix(in srgb, var(--text-accent) 20%, transparent);
+}
+
+/* ── Modais ──────────────────────────────────────────── */
+
+.sig-modal { min-width: 340px; }
+
+.sig-modal-desc {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin-bottom: var(--size-4-3);
+  padding: var(--size-4-2) var(--size-4-3);
+  background: var(--background-secondary);
+  border-radius: var(--radius-s);
+  border-left: 3px solid var(--text-accent);
+}
+
+.sig-pwd-field { min-width: 200px; }
+
+.sig-error {
+  color: var(--text-error);
+  font-size: var(--font-ui-small);
+  padding: var(--size-4-1) var(--size-4-2);
+  margin: calc(-1 * var(--size-4-2)) 0 var(--size-4-2);
+  background: color-mix(in srgb, var(--text-error) 8%, transparent);
+  border-radius: var(--radius-s);
+  border-left: 2px solid var(--text-error);
+}
+
+/* ── Modal: lista de assinantes ──────────────────────── */
+
+.sig-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  min-width: 300px;
+}
+
+.sig-signer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--size-4-3) var(--size-4-4);
+  border-radius: var(--radius-m);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.sig-signer-row:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--text-accent);
+}
+
+.sig-signer-name {
+  font-weight: 600;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+}
+
+.sig-signer-role {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+/* ── Settings: dica da tag ativa ─────────────────────── */
+
+.sig-tag-hint {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  margin: calc(-1 * var(--size-4-2)) 0 var(--size-4-3);
+}
+
+.sig-tag-hint code {
+  color: var(--text-accent);
+  background: color-mix(in srgb, var(--text-accent) 10%, transparent);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* ── Settings: aviso de segurança (email) ────────────── */
+
+.sig-email-warning {
+  font-size: var(--font-ui-small);
+  color: var(--text-warning, #b45309);
+  background: color-mix(in srgb, var(--text-warning, #b45309) 8%, transparent);
+  border-left: 3px solid var(--text-warning, #b45309);
+  border-radius: var(--radius-s);
+  padding: var(--size-4-2) var(--size-4-3);
+  margin-bottom: var(--size-4-3);
+}
+
+.sig-recipients-label {
+  font-weight: 600;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+  margin: var(--size-4-3) 0 2px;
+}
+
+/* ── Botão final do modal alinhado à direita ─────────── */
+
+.sig-modal .setting-item:last-child {
+  border-top: none;
+  justify-content: flex-end;
+  padding-top: var(--size-4-2);
+}

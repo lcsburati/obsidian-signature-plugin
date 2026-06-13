@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-signature",
+  "name": "Signature",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "Sign notes inline with name, role, timestamp and unique hash. Supports pt-BR ([assinatura]), English ([signature]) and Chinese ([签名]) trigger tags.",
+  "author": "Lucas Burati",
+  "authorUrl": "https://github.com/lcsburati",
+  "isDesktopOnly": true
+}
