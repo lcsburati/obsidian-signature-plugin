@@ -23,6 +23,7 @@ interface Signer {
   name: string;
   role: string;
   passwordHash: string;
+  lockOnSign: boolean; // quando true, usa prefixo LOCKED e bloqueia o doc inteiro
 }
 
 interface EmailConfig {
@@ -32,30 +33,46 @@ interface EmailConfig {
   smtpUser: string;
   smtpPass: string;
   recipients: string[];
+  alertOnTamper: boolean; // envia email quando assinatura inválida é detectada
 }
 
 interface SignatureSettings {
   signers: Signer[];
   language: 'pt-BR' | 'en' | 'zh';
   email: EmailConfig;
+  verifyOnOpen: boolean; // verifica assinaturas ao abrir arquivo
 }
 
 const DEFAULT_EMAIL: EmailConfig = {
   enabled: false, smtpHost: '', smtpPort: 587,
   smtpUser: '', smtpPass: '', recipients: [],
+  alertOnTamper: false,
 };
 
 const DEFAULT_SETTINGS: SignatureSettings = {
-  signers: [], language: 'en', email: { ...DEFAULT_EMAIL },
+  signers: [], language: 'en',
+  email: { ...DEFAULT_EMAIL },
+  verifyOnOpen: true,
 };
+
+// ── ParsedSig ────────────────────────────────────────────────────────────────
+
+interface ParsedSig {
+  from: number; to: number;
+  raw: string;          // texto completo do bloco
+  name: string; role: string; ts: string;
+  idHash: string;       // 8 hex — hash(name+role+ts)
+  contentHash: string;  // 8 hex — hash(conteúdo sem sigs). Vazio = formato antigo
+  isLock: boolean;      // true se prefixo LOCKED/BLOQUEADO/已锁定
+}
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 
 interface Locale {
-  // Meta
-  placeholder_tag: string;    // tag que o utilizador escreve na nota
-  sig_prefix: string;         // prefixo do bloco assinado ex: SIGNED, ASSINADO, 已签名
-  // Settings
+  placeholder_tag: string;
+  sig_prefix: string;
+  lock_prefix: string;
+  // settings
   settings_title: string; settings_desc: string;
   signer_n: (n: number) => string; signer_name_desc: string;
   name_placeholder: string; role_placeholder: string;
@@ -63,26 +80,26 @@ interface Locale {
   has_password_desc: string; change_password_btn: string; remove_password_btn: string;
   delete_label: string; delete_desc_protected: string; delete_desc_free: string;
   delete_btn: string; add_signer_btn: string; language_label: string; language_desc: string;
-  // Sign flow
+  signer_lock_label: string; signer_lock_desc: string;
+  verify_on_open_label: string; verify_on_open_desc: string;
+  // sign flow
   pick_signer_title: string; sign_pwd_title: (n: string) => string;
   sign_pwd_prompt: (n: string) => string; sign_btn: string;
   wrong_pwd: (n: number) => string; too_many_attempts: string; no_signers: string;
-  // Set password
+  // set/change/remove password
   set_pwd_title: (n: string) => string; new_pwd_label: string; confirm_pwd_label: string;
   new_pwd_placeholder: string; confirm_pwd_placeholder: string; set_pwd_btn: string;
   pwd_empty: string; pwd_mismatch: string; pwd_set_ok: (n: string) => string;
-  // Change password
   change_pwd_title: (n: string) => string; current_pwd_label: string;
   current_pwd_placeholder: string; change_pwd_btn: string;
   wrong_current_pwd: (n: number) => string; pwd_changed_ok: (n: string) => string;
   new_pwd_empty: string;
-  // Protected action
   remove_pwd_title: (n: string) => string; remove_pwd_desc: (n: string) => string;
   remove_pwd_btn: string; pwd_removed_ok: (n: string) => string;
   delete_title: (n: string) => string; delete_desc_modal: (n: string) => string;
   delete_confirm_btn: string; signer_deleted: (n: string) => string;
   pwd_field_placeholder: (n: string) => string;
-  // Email
+  // email
   email_section_title: string; email_enabled_label: string; email_enabled_desc: string;
   email_warning: string; email_smtp_host: string; email_smtp_host_desc: string;
   email_smtp_port: string; email_smtp_port_desc: string; email_smtp_user: string;
@@ -96,18 +113,31 @@ interface Locale {
   email_body_text: (note: string, signer: string, ts: string) => string;
   email_test_subject: string; email_test_body: string;
   email_no_recipients: string; email_incomplete_config: string;
-  // Signature protection
+  email_tamper_label: string; email_tamper_desc: string;
+  email_tamper_subject: (note: string) => string;
+  email_tamper_body: (note: string, n: number) => string;
+  // signature protection
   sig_protected: string; remove_sig_command: string;
   remove_sig_title: (n: string) => string; remove_sig_desc: (n: string, ts: string) => string;
   remove_sig_no_sig: string; remove_sig_ok: string;
   remove_sig_confirm_unknown: string; remove_sig_confirm_btn: string;
   remove_sig_confirm_no_pwd: string;
+  // lock
+  lock_protected: string;
+  // tamper detection
+  sig_tampered_label: string;    // tooltip na decoração vermelha
+  sig_unverifiable_label: string; // tooltip formato antigo
+  verify_command: string;
+  verify_ok: string;
+  verify_tampered: (n: number) => string;
+  verify_unverifiable: (n: number) => string;
 }
+
+// ── LOCALES ───────────────────────────────────────────────────────────────────
 
 const LOCALES: Record<SignatureSettings['language'], Locale> = {
   'en': {
-    placeholder_tag: 'signature',
-    sig_prefix: 'SIGNED',
+    placeholder_tag: 'signature', sig_prefix: 'SIGNED', lock_prefix: 'LOCKED',
     settings_title: 'Signature — Settings',
     settings_desc: 'Password protects changes and deletion. Stored as hash — not recoverable if lost.',
     signer_n: (n) => `Signer ${n}`, signer_name_desc: 'Name and role displayed in the signature.',
@@ -119,6 +149,10 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     delete_desc_free: 'Permanently removes this signer.',
     delete_btn: 'Delete', add_signer_btn: '+ Add signer',
     language_label: 'Language', language_desc: 'Plugin interface language.',
+    signer_lock_label: 'Lock file on sign',
+    signer_lock_desc: 'When this signer applies a signature, the entire document becomes read-only in Obsidian. Only removing the signature (with password) restores editing.',
+    verify_on_open_label: 'Verify signatures on file open',
+    verify_on_open_desc: 'Check signature integrity every time a note is opened. Shows a warning and optionally sends an email if tampering is detected.',
     pick_signer_title: 'Select signer',
     sign_pwd_title: (n) => `Confirm identity — ${n}`, sign_pwd_prompt: (n) => `Password for ${n}`,
     sign_btn: 'Sign', wrong_pwd: (n) => `Wrong password. Attempts remaining: ${n}`,
@@ -161,6 +195,10 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     email_test_body: 'This is a test email from the Obsidian Signature plugin. Notifications are working correctly.',
     email_no_recipients: 'No recipients configured.',
     email_incomplete_config: 'Configure SMTP server, user and password before enabling.',
+    email_tamper_label: 'Alert on tampered signature',
+    email_tamper_desc: 'Sends an email alert when a tampered or invalid signature is detected on file open.',
+    email_tamper_subject: (note) => `[Signature] ⚠️ Tampered signature — ${note}`,
+    email_tamper_body: (note, n) => `${n} tampered or invalid signature(s) detected in "${note}". The document content may have been modified after signing.`,
     sig_protected: '🔒 Signatures are protected from direct editing. Use: Command Palette → "Remove signature".',
     remove_sig_command: 'Remove signature at cursor',
     remove_sig_title: (n) => `Remove signature — ${n}`,
@@ -170,10 +208,16 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     remove_sig_confirm_unknown: 'Signer not found in settings. Confirm removal?',
     remove_sig_confirm_btn: 'Remove',
     remove_sig_confirm_no_pwd: 'This signer has no password. Confirm removal?',
+    lock_protected: '🔒 This document is locked by a signature. Use: Command Palette → "Remove signature" to unlock.',
+    sig_tampered_label: '⚠️ TAMPERED — document content was modified after signing',
+    sig_unverifiable_label: '⚠️ Legacy signature — cannot verify document integrity',
+    verify_command: 'Verify signatures in current note',
+    verify_ok: '✅ All signatures are valid.',
+    verify_tampered: (n) => `⚠️ ${n} tampered/invalid signature(s) found in this note.`,
+    verify_unverifiable: (n) => `ℹ️ ${n} legacy signature(s) cannot be verified (created before tamper detection).`,
   },
   'pt-BR': {
-    placeholder_tag: 'assinatura',
-    sig_prefix: 'ASSINADO',
+    placeholder_tag: 'assinatura', sig_prefix: 'ASSINADO', lock_prefix: 'BLOQUEADO',
     settings_title: 'Assinatura — Configurações',
     settings_desc: 'Senha protege alterações e exclusão. Armazenada como hash — não recuperável se perdida.',
     signer_n: (n) => `Assinante ${n}`, signer_name_desc: 'Nome e cargo exibidos na assinatura.',
@@ -185,6 +229,10 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     delete_desc_free: 'Remove permanentemente este assinante.',
     delete_btn: 'Excluir', add_signer_btn: '+ Adicionar assinante',
     language_label: 'Idioma', language_desc: 'Idioma da interface do plugin.',
+    signer_lock_label: 'Bloquear arquivo ao assinar',
+    signer_lock_desc: 'Quando este assinante aplica uma assinatura, o documento inteiro fica somente-leitura no Obsidian. Só é possível editar novamente removendo a assinatura (com senha).',
+    verify_on_open_label: 'Verificar assinaturas ao abrir arquivo',
+    verify_on_open_desc: 'Verifica a integridade das assinaturas toda vez que uma nota é aberta. Exibe um aviso e opcionalmente envia email se detectar adulteração.',
     pick_signer_title: 'Selecionar assinante',
     sign_pwd_title: (n) => `Confirmar identidade — ${n}`, sign_pwd_prompt: (n) => `Senha de ${n}`,
     sign_btn: 'Assinar', wrong_pwd: (n) => `Senha incorreta. Tentativas restantes: ${n}`,
@@ -227,6 +275,10 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     email_test_body: 'Este é um email de teste do plugin Signature do Obsidian. As notificações estão funcionando corretamente.',
     email_no_recipients: 'Nenhum destinatário cadastrado.',
     email_incomplete_config: 'Configure servidor SMTP, usuário e senha antes de ativar.',
+    email_tamper_label: 'Alertar ao detectar adulteração',
+    email_tamper_desc: 'Envia um email de alerta quando uma assinatura adulterada ou inválida é detectada ao abrir o arquivo.',
+    email_tamper_subject: (note) => `[Assinatura] ⚠️ Assinatura adulterada — ${note}`,
+    email_tamper_body: (note, n) => `${n} assinatura(s) adulterada(s) ou inválida(s) detectada(s) em "${note}". O conteúdo do documento pode ter sido modificado após a assinatura.`,
     sig_protected: '🔒 Assinaturas são protegidas contra edição direta. Use: Paleta de Comandos → "Remover assinatura".',
     remove_sig_command: 'Remover assinatura na posição do cursor',
     remove_sig_title: (n) => `Remover assinatura — ${n}`,
@@ -236,10 +288,16 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     remove_sig_confirm_unknown: 'Assinante não encontrado nas configurações. Confirmar remoção?',
     remove_sig_confirm_btn: 'Remover',
     remove_sig_confirm_no_pwd: 'Este assinante não tem senha. Confirmar remoção?',
+    lock_protected: '🔒 Este documento está bloqueado por uma assinatura. Use: Paleta de Comandos → "Remover assinatura" para desbloquear.',
+    sig_tampered_label: '⚠️ ADULTERADA — o conteúdo do documento foi modificado após a assinatura',
+    sig_unverifiable_label: '⚠️ Assinatura legada — não é possível verificar a integridade do documento',
+    verify_command: 'Verificar assinaturas na nota atual',
+    verify_ok: '✅ Todas as assinaturas são válidas.',
+    verify_tampered: (n) => `⚠️ ${n} assinatura(s) adulterada(s)/inválida(s) encontrada(s) nesta nota.`,
+    verify_unverifiable: (n) => `ℹ️ ${n} assinatura(s) legada(s) não podem ser verificadas (criadas antes da detecção de adulteração).`,
   },
   'zh': {
-    placeholder_tag: '签名',
-    sig_prefix: '已签名',
+    placeholder_tag: '签名', sig_prefix: '已签名', lock_prefix: '已锁定',
     settings_title: '签名 — 设置',
     settings_desc: '密码保护修改和删除操作。以哈希值存储，丢失后无法恢复。',
     signer_n: (n) => `签署人 ${n}`, signer_name_desc: '签名中显示的姓名和职位。',
@@ -251,6 +309,10 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     delete_desc_free: '永久删除此签署人。',
     delete_btn: '删除', add_signer_btn: '+ 添加签署人',
     language_label: '语言', language_desc: '插件界面语言。',
+    signer_lock_label: '签名时锁定文件',
+    signer_lock_desc: '此签署人应用签名后，整个文档在 Obsidian 中变为只读。只有删除签名（需密码）才能恢复编辑。',
+    verify_on_open_label: '打开文件时验证签名',
+    verify_on_open_desc: '每次打开笔记时检查签名完整性。如果检测到篡改，将显示警告并可选择发送邮件。',
     pick_signer_title: '选择签署人',
     sign_pwd_title: (n) => `确认身份 — ${n}`, sign_pwd_prompt: (n) => `${n} 的密码`,
     sign_btn: '签名', wrong_pwd: (n) => `密码错误，剩余尝试次数：${n}`,
@@ -293,6 +355,10 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     email_test_body: '这是来自 Obsidian Signature 插件的测试邮件。通知功能运行正常。',
     email_no_recipients: '未配置收件人。',
     email_incomplete_config: '启用前请先配置 SMTP 服务器、用户名和密码。',
+    email_tamper_label: '检测到篡改时发出警报',
+    email_tamper_desc: '打开文件时检测到篡改或无效签名，将发送邮件警报。',
+    email_tamper_subject: (note) => `[签名] ⚠️ 签名被篡改 — ${note}`,
+    email_tamper_body: (note, n) => `在"${note}"中检测到 ${n} 个被篡改或无效的签名。文档内容可能在签署后被修改。`,
     sig_protected: '🔒 签名受保护，无法直接编辑。请使用：命令面板 → "删除签名"。',
     remove_sig_command: '删除光标处的签名',
     remove_sig_title: (n) => `删除签名 — ${n}`,
@@ -302,10 +368,17 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     remove_sig_confirm_unknown: '在设置中未找到此签署人。确认删除？',
     remove_sig_confirm_btn: '删除',
     remove_sig_confirm_no_pwd: '此签署人未设置密码。确认删除？',
+    lock_protected: '🔒 此文档已被签名锁定。请使用：命令面板 → "删除签名"以解锁。',
+    sig_tampered_label: '⚠️ 已篡改 — 签署后文档内容被修改',
+    sig_unverifiable_label: '⚠️ 旧格式签名 — 无法验证文档完整性',
+    verify_command: '验证当前笔记中的签名',
+    verify_ok: '✅ 所有签名均有效。',
+    verify_tampered: (n) => `⚠️ 发现 ${n} 个被篡改/无效的签名。`,
+    verify_unverifiable: (n) => `ℹ️ ${n} 个旧格式签名无法验证（在篡改检测功能添加之前创建）。`,
   },
 };
 
-// ── Utilitários ──────────────────────────────────────────────────────────────
+// ── Hashing ───────────────────────────────────────────────────────────────────
 
 function shortHash(input: string): string {
   let h = 2166136261;
@@ -313,53 +386,94 @@ function shortHash(input: string): string {
   return h.toString(16).padStart(8, '0');
 }
 
-/**
- * Regex que detecta TODOS os placeholders (todos os idiomas).
- * O utilizador pode usar [assinatura], [signature] ou [签名] independentemente
- * do idioma configurado — a detecção é sempre universal.
- */
+/** Conteúdo do doc sem nenhum bloco de assinatura — base para o content hash. */
+function stripSigs(text: string): string {
+  return text
+    .replace(/\[(ASSINADO|SIGNED|已签名|BLOQUEADO|LOCKED|已锁定)(-LOCK)?: [^\]]+\]/g, '')
+    .replace(/\[(assinatura|signature|签名)\]/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function makeIdHash(name: string, role: string, ts: string): string {
+  return shortHash(name + '|' + role + '|' + ts);
+}
+
+function makeContentHash(docText: string): string {
+  return shortHash(stripSigs(docText));
+}
+
+// ── Regex ─────────────────────────────────────────────────────────────────────
+
+/** Detecta todos os placeholders (todos os idiomas). */
 const ALL_PLACEHOLDER_RE = /\[(assinatura|signature|签名)\]/gi;
 
 /**
- * Regex que detecta assinaturas JÁ APLICADAS (todos os prefixos).
- * Groups: 1=prefix, 2=name, 3=role, 4=timestamp, 5=hash
+ * Detecta assinaturas aplicadas — suporta formato antigo (8 hex) e novo (8hex.8hex).
+ * Groups: 1=prefix, 2=name, 3=role, 4=ts, 5=hash (old or new format)
  */
-const SIGNED_RE = /\[(ASSINADO|SIGNED|已签名): ([^\]|]+?) - ([^\]|]+?) \| ([^\]|]+?) \| ([^\]]+?)\]/g;
+const SIGNED_RE = /\[(ASSINADO|SIGNED|已签名|BLOQUEADO|LOCKED|已锁定): ([^\]|]+?) - ([^\]|]+?) \| ([^\]|]+?) \| ([a-f0-9]{8}(?:\.[a-f0-9]{8})?)\]/g;
 
-interface ParsedSig { from: number; to: number; name: string; role: string; ts: string; }
+const LOCK_PREFIXES = new Set(['LOCKED', 'BLOQUEADO', '已锁定']);
 
-function findSignaturesInText(text: string, offset = 0): ParsedSig[] {
+function parseSigs(text: string, offset = 0): ParsedSig[] {
   const results: ParsedSig[] = [];
   SIGNED_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = SIGNED_RE.exec(text)) !== null) {
+    const hashField = m[5];
+    const dotIdx = hashField.indexOf('.');
+    const idHash = dotIdx >= 0 ? hashField.slice(0, dotIdx) : hashField;
+    const contentHash = dotIdx >= 0 ? hashField.slice(dotIdx + 1) : '';
     results.push({
       from: offset + m.index, to: offset + m.index + m[0].length,
+      raw: m[0],
       name: m[2].trim(), role: m[3].trim(), ts: m[4].trim(),
+      idHash, contentHash,
+      isLock: LOCK_PREFIXES.has(m[1]),
     });
   }
   return results;
 }
 
+/** Retorna true se a assinatura é válida com o conteúdo atual do doc. */
+function verifySig(sig: ParsedSig, fullDocText: string): boolean | 'legacy' {
+  if (!sig.contentHash) return 'legacy'; // formato antigo, não verificável
+  const expectedId = makeIdHash(sig.name, sig.role, sig.ts);
+  const expectedContent = makeContentHash(fullDocText);
+  return sig.idHash === expectedId && sig.contentHash === expectedContent;
+}
+
+// ── Email ─────────────────────────────────────────────────────────────────────
+
 function emailHtml(noteTitle: string, signerName: string, timestamp: string): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+<table width="100%"cellpadding="0"cellspacing="0"style="background:#f4f4f5;padding:32px 0;"><tr><td align="center">
+<table width="560"cellpadding="0"cellspacing="0"style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
 <tr><td style="background:#7c3aed;padding:24px 32px;"><h1 style="margin:0;color:#fff;font-size:20px;font-weight:600;">✍️ Document Signed</h1></td></tr>
-<tr><td style="padding:28px 32px;">
-<table width="100%">
-<tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;">
-<span style="color:#6b7280;font-size:13px;display:block;margin-bottom:2px;">Note</span>
-<span style="color:#111827;font-size:16px;font-weight:600;">${noteTitle}</span></td></tr>
-<tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;">
-<span style="color:#6b7280;font-size:13px;display:block;margin-bottom:2px;">Signed by</span>
-<span style="color:#111827;font-size:15px;font-weight:500;">${signerName}</span></td></tr>
-<tr><td style="padding:10px 0;">
-<span style="color:#6b7280;font-size:13px;display:block;margin-bottom:2px;">Date / Time</span>
-<span style="color:#111827;font-size:15px;">${timestamp}</span></td></tr>
+<tr><td style="padding:28px 32px;"><table width="100%">
+<tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;font-size:13px;display:block;margin-bottom:2px;">Note</span><span style="color:#111827;font-size:16px;font-weight:600;">${noteTitle}</span></td></tr>
+<tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;font-size:13px;display:block;margin-bottom:2px;">Signed by</span><span style="color:#111827;font-size:15px;font-weight:500;">${signerName}</span></td></tr>
+<tr><td style="padding:10px 0;"><span style="color:#6b7280;font-size:13px;display:block;margin-bottom:2px;">Date / Time</span><span style="color:#111827;font-size:15px;">${timestamp}</span></td></tr>
 </table></td></tr>
 <tr><td style="padding:0 32px 24px;color:#9ca3af;font-size:12px;">Sent automatically by the <strong>Signature</strong> plugin for Obsidian.</td></tr>
+</table></td></tr></table></body></html>`;
+}
+
+function tamperEmailHtml(noteTitle: string, n: number): string {
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%"cellpadding="0"cellspacing="0"style="background:#f4f4f5;padding:32px 0;"><tr><td align="center">
+<table width="560"cellpadding="0"cellspacing="0"style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+<tr><td style="background:#dc2626;padding:24px 32px;"><h1 style="margin:0;color:#fff;font-size:20px;font-weight:600;">⚠️ Tampered Signature Detected</h1></td></tr>
+<tr><td style="padding:28px 32px;"><table width="100%">
+<tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;font-size:13px;display:block;margin-bottom:2px;">Note</span><span style="color:#111827;font-size:16px;font-weight:600;">${noteTitle}</span></td></tr>
+<tr><td style="padding:10px 0;"><span style="color:#6b7280;font-size:13px;display:block;margin-bottom:2px;">Tampered signatures</span><span style="color:#dc2626;font-size:20px;font-weight:700;">${n}</span></td></tr>
+</table>
+<p style="color:#6b7280;font-size:13px;margin-top:16px;">The document content was likely modified after it was signed. This may indicate unauthorized editing.</p>
+</td></tr>
+<tr><td style="padding:0 32px 24px;color:#9ca3af;font-size:12px;">Alert from the <strong>Signature</strong> plugin for Obsidian.</td></tr>
 </table></td></tr></table></body></html>`;
 }
 
@@ -387,6 +501,22 @@ async function notifySignature(plugin: SignaturePlugin, activeFile: TFile | null
   }
 }
 
+async function notifyTamper(plugin: SignaturePlugin, file: TFile, tamperedCount: number): Promise<void> {
+  const cfg = plugin.settings.email;
+  const L = plugin.L;
+  if (!cfg.alertOnTamper || !cfg.recipients.length || !cfg.smtpHost || !cfg.smtpUser || !cfg.smtpPass) return;
+  try {
+    await sendEmail(
+      cfg,
+      L.email_tamper_subject(file.basename),
+      L.email_tamper_body(file.basename, tamperedCount),
+      tamperEmailHtml(file.basename, tamperedCount),
+    );
+  } catch (err) {
+    console.error('[Signature] Tamper alert email error:', err);
+  }
+}
+
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
 function addPwdField(container: HTMLElement, label: string, placeholder: string, onReady: (input: HTMLInputElement) => void): HTMLInputElement {
@@ -404,18 +534,44 @@ function createErrorEl(container: HTMLElement): HTMLElement {
 function showError(el: HTMLElement, msg: string) { el.setText(msg); el.show(); }
 function clearError(el: HTMLElement) { el.setText(''); el.hide(); }
 
-// ── CM6: decorações dos placeholders ─────────────────────────────────────────
+// ── CM6: decorações ───────────────────────────────────────────────────────────
 
-function buildDecorations(view: EditorView): DecorationSet {
+function buildDecorations(view: EditorView, plugin: SignaturePlugin): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  const mark = Decoration.mark({ class: 'sig-placeholder' });
+  const placeholderMark = Decoration.mark({ class: 'sig-placeholder' });
+  const lockMark = Decoration.mark({ class: 'sig-locked', attributes: { title: '' } });
+  const tamperedMark = Decoration.mark({ class: 'sig-tampered' });
+  const legacyMark = Decoration.mark({ class: 'sig-legacy' });
+
+  const L = LOCALES[plugin.settings.language];
+
   for (const { from, to } of view.visibleRanges) {
     const text = view.state.doc.sliceString(from, to);
+    const fullText = view.state.doc.toString();
+
+    // Placeholders
     ALL_PLACEHOLDER_RE.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = ALL_PLACEHOLDER_RE.exec(text)) !== null)
-      builder.add(from + match.index, from + match.index + match[0].length, mark);
+      builder.add(from + match.index, from + match.index + match[0].length, placeholderMark);
+
+    // Assinaturas aplicadas
+    for (const sig of parseSigs(text, from)) {
+      const validity = verifySig(sig, fullText);
+      if (validity === 'legacy') {
+        builder.add(sig.from, sig.to, Decoration.mark({ class: 'sig-legacy', attributes: { title: L.sig_unverifiable_label } }));
+      } else if (validity === false) {
+        builder.add(sig.from, sig.to, Decoration.mark({ class: 'sig-tampered', attributes: { title: L.sig_tampered_label } }));
+      } else if (sig.isLock) {
+        builder.add(sig.from, sig.to, Decoration.mark({ class: 'sig-locked', attributes: { title: '🔒 Lock signature — document is read-only' } }));
+      } else {
+        builder.add(sig.from, sig.to, Decoration.mark({ class: 'sig-valid' }));
+      }
+    }
   }
+
+  // Suppress unused var warnings
+  void lockMark; void tamperedMark; void legacyMark;
   return builder.finish();
 }
 
@@ -426,9 +582,19 @@ function makeProtectionFilter(plugin: SignaturePlugin) {
     if (plugin.bypassProtection || !tr.docChanged) return tr;
 
     const text = tr.startState.doc.toString();
-    const sigs = findSignaturesInText(text);
+    const sigs = parseSigs(text);
     if (!sigs.length) return tr;
 
+    const L = LOCALES[plugin.settings.language];
+
+    // Verifica se há lock signature válida — bloqueia TUDO
+    const hasActiveLock = sigs.some(s => s.isLock && verifySig(s, text) === true);
+    if (hasActiveLock) {
+      queueMicrotask(() => new Notice(L.lock_protected));
+      return [];
+    }
+
+    // Verifica se a edição toca qualquer assinatura
     let blocked = false;
     tr.changes.iterChanges((fromA, toA) => {
       if (blocked) return;
@@ -438,7 +604,7 @@ function makeProtectionFilter(plugin: SignaturePlugin) {
     });
 
     if (blocked) {
-      queueMicrotask(() => new Notice(LOCALES[plugin.settings.language].sig_protected));
+      queueMicrotask(() => new Notice(L.sig_protected));
       return [];
     }
     return tr;
@@ -451,9 +617,9 @@ function makeEditorPlugin(plugin: SignaturePlugin) {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
-      constructor(view: EditorView) { this.decorations = buildDecorations(view); }
+      constructor(view: EditorView) { this.decorations = buildDecorations(view, plugin); }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged) this.decorations = buildDecorations(u.view);
+        if (u.docChanged || u.viewportChanged) this.decorations = buildDecorations(u.view, plugin);
       }
     },
     {
@@ -468,7 +634,6 @@ function makeEditorPlugin(plugin: SignaturePlugin) {
           const pos = view.posAtDOM(target);
           const line = view.state.doc.lineAt(pos);
 
-          // Detecta qual placeholder foi clicado (qualquer idioma)
           ALL_PLACEHOLDER_RE.lastIndex = 0;
           let match: RegExpExecArray | null;
           let from = -1, to = -1;
@@ -480,13 +645,17 @@ function makeEditorPlugin(plugin: SignaturePlugin) {
 
           const applySignature = (signer: Signer) => {
             const now = new Date();
-            const timestamp = now.toISOString().slice(0, 16).replace('T', ' ');
-            const id = shortHash(signer.name + signer.role + now.toISOString());
-            // Usa o prefixo do idioma atual
-            const sig = `[${L.sig_prefix}: ${signer.name} - ${signer.role} | ${timestamp} | ${id}]`;
+            const ts = now.toISOString().slice(0, 16).replace('T', ' ');
+            const idHash = makeIdHash(signer.name, signer.role, ts);
+            // Conteúdo do doc sem o placeholder que será substituído
+            const docAfterSig = view.state.doc.toString()
+              .slice(0, from) + view.state.doc.toString().slice(to);
+            const contentHash = makeContentHash(docAfterSig);
+            const prefix = signer.lockOnSign ? L.lock_prefix : L.sig_prefix;
+            const sig = `[${prefix}: ${signer.name} - ${signer.role} | ${ts} | ${idHash}.${contentHash}]`;
             view.dispatch({ changes: { from, to, insert: sig } });
             const activeFile = plugin.app.workspace.getActiveFile();
-            notifySignature(plugin, activeFile, signer.name, timestamp);
+            notifySignature(plugin, activeFile, signer.name, ts);
           };
 
           if (!plugin.settings.signers.length) { new Notice(L.no_signers); return true; }
@@ -527,8 +696,8 @@ class SignerPickerModal extends Modal {
     for (const signer of this.signers) {
       const row = this.contentEl.createDiv({ cls: 'sig-signer-row' });
       const nameEl = row.createSpan({ cls: 'sig-signer-name', text: signer.name });
-      row.createSpan({ cls: 'sig-signer-role', text: signer.role });
-      if (signer.passwordHash) nameEl.createSpan({ cls: 'sig-lock', text: ' 🔒' });
+      row.createSpan({ cls: 'sig-signer-role', text: signer.role + (signer.lockOnSign ? ' 🔐' : '') });
+      if (signer.passwordHash) nameEl.createSpan({ cls: 'sig-lock-icon', text: ' 🔒' });
       row.addEventListener('click', () => { this.close(); this.onChoose(signer); });
     }
   }
@@ -666,7 +835,7 @@ class ConfirmRemoveModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
-// ── Plugin principal ──────────────────────────────────────────────────────────
+// ── Plugin ────────────────────────────────────────────────────────────────────
 
 export default class SignaturePlugin extends Plugin {
   settings: SignatureSettings = DEFAULT_SETTINGS;
@@ -677,6 +846,14 @@ export default class SignaturePlugin extends Plugin {
     this.registerEditorExtension([makeEditorPlugin(this), makeProtectionFilter(this)]);
     this.addSettingTab(new SignatureSettingTab(this.app, this));
 
+    // Verifica assinaturas ao abrir arquivo
+    this.registerEvent(
+      this.app.workspace.on('file-open', async (file) => {
+        if (file && this.settings.verifyOnOpen) await this.verifyFile(file);
+      })
+    );
+
+    // Comando: remover assinatura
     this.addCommand({
       id: 'remove-signature',
       name: this.L.remove_sig_command,
@@ -685,10 +862,9 @@ export default class SignaturePlugin extends Plugin {
         const cursor = editor.getCursor();
         const line = editor.getLine(cursor.line);
         const lineOffset = editor.posToOffset({ line: cursor.line, ch: 0 });
-        const sigs = findSignaturesInText(line, lineOffset);
+        const sigs = parseSigs(line, lineOffset);
 
         if (!sigs.length) { new Notice(L.remove_sig_no_sig); return; }
-
         const sig = sigs.find(s => cursor.ch >= s.from - lineOffset && cursor.ch <= s.to - lineOffset) ?? sigs[0];
 
         const doRemove = () => {
@@ -706,6 +882,46 @@ export default class SignaturePlugin extends Plugin {
         }
       },
     });
+
+    // Comando: verificar assinaturas na nota atual
+    this.addCommand({
+      id: 'verify-signatures',
+      name: this.L.verify_command,
+      editorCallback: async (editor) => {
+        const L = this.L;
+        const text = editor.getValue();
+        const sigs = parseSigs(text);
+        if (!sigs.length) { new Notice(L.verify_ok); return; }
+
+        let tampered = 0, legacy = 0;
+        for (const sig of sigs) {
+          const v = verifySig(sig, text);
+          if (v === false) tampered++;
+          else if (v === 'legacy') legacy++;
+        }
+
+        if (tampered > 0) new Notice(L.verify_tampered(tampered));
+        else if (legacy > 0) new Notice(L.verify_unverifiable(legacy));
+        else new Notice(L.verify_ok);
+      },
+    });
+  }
+
+  /** Verifica assinaturas em um arquivo e envia alerta se houver adulteração. */
+  async verifyFile(file: TFile): Promise<void> {
+    try {
+      const text = await this.app.vault.read(file);
+      const sigs = parseSigs(text);
+      if (!sigs.length) return;
+
+      const tampered = sigs.filter(s => verifySig(s, text) === false);
+      if (tampered.length > 0) {
+        new Notice(`⚠️ ${file.basename}: ${tampered.length} tampered signature(s) detected!`, 8000);
+        await notifyTamper(this, file, tampered.length);
+      }
+    } catch (err) {
+      console.error('[Signature] Verify error:', err);
+    }
   }
 
   get L(): Locale { return LOCALES[this.settings.language]; }
@@ -714,6 +930,7 @@ export default class SignaturePlugin extends Plugin {
     const data = await this.loadData();
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data, {
       email: Object.assign({}, DEFAULT_EMAIL, data?.email ?? {}),
+      signers: (data?.signers ?? []).map((s: Signer) => ({ lockOnSign: false, ...s })),
     });
   }
 
@@ -740,10 +957,12 @@ class SignatureSettingTab extends PluginSettingTab {
           .onChange(async (v) => { plugin.settings.language = v as SignatureSettings['language']; await plugin.saveSettings(); this.display(); })
       );
 
+    new Setting(containerEl).setName(L.verify_on_open_label).setDesc(L.verify_on_open_desc)
+      .addToggle((t) => t.setValue(plugin.settings.verifyOnOpen).onChange(async (v) => { plugin.settings.verifyOnOpen = v; await plugin.saveSettings(); }));
+
     containerEl.createEl('hr');
     containerEl.createEl('h3', { text: '✍️ ' + ({'pt-BR': 'Assinantes', 'en': 'Signers', 'zh': '签署人'}[plugin.settings.language]) });
 
-    // Dica de tag
     const tagHint = containerEl.createDiv({ cls: 'sig-tag-hint' });
     tagHint.createSpan({ text: {'pt-BR': 'Tag ativa: ', 'en': 'Active tag: ', 'zh': '当前标签：'}[plugin.settings.language] });
     tagHint.createEl('code', { text: `[${L.placeholder_tag}]` });
@@ -756,6 +975,9 @@ class SignatureSettingTab extends PluginSettingTab {
       new Setting(containerEl).setName(L.signer_n(i + 1)).setDesc(L.signer_name_desc)
         .addText((t) => t.setPlaceholder(L.name_placeholder).setValue(s.name).onChange(async (v) => { signers[i].name = v.trim(); await plugin.saveSettings(); }))
         .addText((t) => t.setPlaceholder(L.role_placeholder).setValue(s.role).onChange(async (v) => { signers[i].role = v.trim(); await plugin.saveSettings(); }));
+
+      new Setting(containerEl).setName(L.signer_lock_label).setDesc(L.signer_lock_desc)
+        .addToggle((t) => t.setValue(s.lockOnSign ?? false).onChange(async (v) => { signers[i].lockOnSign = v; await plugin.saveSettings(); }));
 
       const pwdSetting = new Setting(containerEl).setName(L.password_label);
       if (!s.passwordHash) {
@@ -787,7 +1009,7 @@ class SignatureSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl).addButton((b) =>
-      b.setButtonText(L.add_signer_btn).setCta().onClick(async () => { signers.push({ name: '', role: '', passwordHash: '' }); await plugin.saveSettings(); this.display(); })
+      b.setButtonText(L.add_signer_btn).setCta().onClick(async () => { signers.push({ name: '', role: '', passwordHash: '', lockOnSign: false }); await plugin.saveSettings(); this.display(); })
     );
 
     // ── Email ──────────────────────────────────────────────────────────────
@@ -803,6 +1025,9 @@ class SignatureSettingTab extends PluginSettingTab {
         if (v && !cfg.recipients.length) { new Notice(L.email_no_recipients); t.setValue(false); return; }
         cfg.enabled = v; await plugin.saveSettings();
       }));
+
+    new Setting(containerEl).setName(L.email_tamper_label).setDesc(L.email_tamper_desc)
+      .addToggle((t) => t.setValue(cfg.alertOnTamper ?? false).onChange(async (v) => { cfg.alertOnTamper = v; await plugin.saveSettings(); }));
 
     new Setting(containerEl).setName(L.email_smtp_host).setDesc(L.email_smtp_host_desc)
       .addText((t) => t.setPlaceholder('smtp.gmail.com').setValue(cfg.smtpHost).onChange(async (v) => { cfg.smtpHost = v.trim(); await plugin.saveSettings(); }));
@@ -832,17 +1057,7 @@ class SignatureSettingTab extends PluginSettingTab {
     };
 
     new Setting(containerEl)
-      .addText((t) => {
-        t.setPlaceholder(L.email_recipient_placeholder);
-        t.inputEl.style.minWidth = '220px';
-        newRecipientInput = t.inputEl;
-        t.inputEl.addEventListener('keydown', async (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            await addRecipient();
-          }
-        });
-      })
+      .addText((t) => { t.setPlaceholder(L.email_recipient_placeholder); t.inputEl.style.minWidth = '220px'; newRecipientInput = t.inputEl; t.inputEl.addEventListener('keydown', async (e) => { if (e.key === 'Enter') { e.preventDefault(); await addRecipient(); } }); })
       .addButton((b) => b.setButtonText(L.email_add_recipient_btn).onClick(addRecipient));
 
     new Setting(containerEl).addButton((b) =>
@@ -852,14 +1067,8 @@ class SignatureSettingTab extends PluginSettingTab {
         b.setButtonText('...').setDisabled(true);
         try {
           await sendEmail(cfg, L.email_test_subject, L.email_test_body, `<p>${L.email_test_body}</p>`);
-          if (!cfg.enabled) {
-            cfg.enabled = true;
-            await plugin.saveSettings();
-            new Notice(L.email_test_ok_enabled);
-            this.display();
-          } else {
-            new Notice(L.email_test_ok);
-          }
+          if (!cfg.enabled) { cfg.enabled = true; await plugin.saveSettings(); new Notice(L.email_test_ok_enabled); this.display(); }
+          else { new Notice(L.email_test_ok); }
         }
         catch (err) { new Notice(L.email_test_fail((err as Error).message)); }
         finally { b.setButtonText(L.email_test_btn).setDisabled(false); }

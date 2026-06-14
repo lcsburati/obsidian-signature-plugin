@@ -82,6 +82,50 @@
   color: var(--text-muted);
 }
 
+/* ── Assinaturas válidas ─────────────────────────────── */
+
+.sig-valid {
+  color: var(--text-success, #16a34a);
+  background-color: color-mix(in srgb, var(--text-success, #16a34a) 8%, transparent);
+  border-radius: 3px;
+  padding: 1px 3px;
+}
+
+/* ── Assinaturas LOCK ────────────────────────────────── */
+
+.sig-locked {
+  color: var(--text-accent);
+  background-color: color-mix(in srgb, var(--text-accent) 12%, transparent);
+  border-radius: 3px;
+  padding: 1px 3px;
+  font-weight: 600;
+  border-bottom: 2px solid var(--text-accent);
+  cursor: help;
+}
+
+/* ── Assinaturas ADULTERADAS ─────────────────────────── */
+
+.sig-tampered {
+  color: var(--text-error);
+  background-color: color-mix(in srgb, var(--text-error) 10%, transparent);
+  border-radius: 3px;
+  padding: 1px 3px;
+  text-decoration: line-through;
+  text-decoration-color: var(--text-error);
+  cursor: help;
+}
+
+/* ── Assinaturas LEGADAS (formato antigo) ────────────── */
+
+.sig-legacy {
+  color: var(--text-warning, #b45309);
+  background-color: color-mix(in srgb, var(--text-warning, #b45309) 8%, transparent);
+  border-radius: 3px;
+  padding: 1px 3px;
+  border-bottom: 1px dashed var(--text-warning, #b45309);
+  cursor: help;
+}
+
 /* ── Settings: dica da tag ativa ─────────────────────── */
 
 .sig-tag-hint {
