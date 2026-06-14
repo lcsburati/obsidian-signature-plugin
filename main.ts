@@ -90,7 +90,7 @@ interface Locale {
   email_recipients_label: string; email_recipients_desc: string;
   email_recipient_placeholder: string; email_add_recipient_btn: string;
   email_remove_recipient_tooltip: string; email_test_btn: string;
-  email_test_ok: string; email_test_fail: (e: string) => string;
+  email_test_ok: string; email_test_ok_enabled: string; email_test_fail: (e: string) => string;
   email_notify_ok: string; email_notify_fail: (e: string) => string;
   email_subject: (note: string) => string;
   email_body_text: (note: string, signer: string, ts: string) => string;
@@ -151,6 +151,7 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     email_recipient_placeholder: 'email@example.com', email_add_recipient_btn: '+ Add recipient',
     email_remove_recipient_tooltip: 'Remove', email_test_btn: 'Send test email',
     email_test_ok: '✅ Test email sent successfully.',
+    email_test_ok_enabled: '✅ Test email sent successfully. Signature notifications are now enabled.',
     email_test_fail: (e) => `❌ Send error: ${e}`,
     email_notify_ok: '📧 Signature notification sent.',
     email_notify_fail: (e) => `⚠️ Email not sent: ${e}`,
@@ -216,6 +217,7 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     email_recipient_placeholder: 'email@exemplo.com', email_add_recipient_btn: '+ Adicionar destinatário',
     email_remove_recipient_tooltip: 'Remover', email_test_btn: 'Enviar email de teste',
     email_test_ok: '✅ Email de teste enviado com sucesso.',
+    email_test_ok_enabled: '✅ Email de teste enviado com sucesso. Notificações de assinatura ativadas.',
     email_test_fail: (e) => `❌ Erro ao enviar: ${e}`,
     email_notify_ok: '📧 Notificação de assinatura enviada.',
     email_notify_fail: (e) => `⚠️ Email não enviado: ${e}`,
@@ -281,6 +283,7 @@ const LOCALES: Record<SignatureSettings['language'], Locale> = {
     email_recipient_placeholder: 'email@example.com', email_add_recipient_btn: '+ 添加收件人',
     email_remove_recipient_tooltip: '删除', email_test_btn: '发送测试邮件',
     email_test_ok: '✅ 测试邮件发送成功。',
+    email_test_ok_enabled: '✅ 测试邮件发送成功。签名通知已启用。',
     email_test_fail: (e) => `❌ 发送失败：${e}`,
     email_notify_ok: '📧 签名通知已发送。',
     email_notify_fail: (e) => `⚠️ 邮件未发送：${e}`,
@@ -822,22 +825,42 @@ class SignatureSettingTab extends PluginSettingTab {
     }
 
     let newRecipientInput: HTMLInputElement;
-    new Setting(containerEl)
-      .addText((t) => { t.setPlaceholder(L.email_recipient_placeholder); t.inputEl.style.minWidth = '220px'; newRecipientInput = t.inputEl; t.inputEl.addEventListener('keydown', async (e) => { if (e.key === 'Enter') await addRecipient(); }); })
-      .addButton((b) => b.setButtonText(L.email_add_recipient_btn).onClick(addRecipient));
-
     const addRecipient = async () => {
       const val = newRecipientInput?.value?.trim();
       if (!val || !val.includes('@')) return;
       if (!cfg.recipients.includes(val)) { cfg.recipients.push(val); await plugin.saveSettings(); this.display(); }
     };
 
+    new Setting(containerEl)
+      .addText((t) => {
+        t.setPlaceholder(L.email_recipient_placeholder);
+        t.inputEl.style.minWidth = '220px';
+        newRecipientInput = t.inputEl;
+        t.inputEl.addEventListener('keydown', async (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            await addRecipient();
+          }
+        });
+      })
+      .addButton((b) => b.setButtonText(L.email_add_recipient_btn).onClick(addRecipient));
+
     new Setting(containerEl).addButton((b) =>
       b.setButtonText(L.email_test_btn).onClick(async () => {
         if (!cfg.smtpHost || !cfg.smtpUser || !cfg.smtpPass) { new Notice(L.email_incomplete_config); return; }
         if (!cfg.recipients.length) { new Notice(L.email_no_recipients); return; }
         b.setButtonText('...').setDisabled(true);
-        try { await sendEmail(cfg, L.email_test_subject, L.email_test_body, `<p>${L.email_test_body}</p>`); new Notice(L.email_test_ok); }
+        try {
+          await sendEmail(cfg, L.email_test_subject, L.email_test_body, `<p>${L.email_test_body}</p>`);
+          if (!cfg.enabled) {
+            cfg.enabled = true;
+            await plugin.saveSettings();
+            new Notice(L.email_test_ok_enabled);
+            this.display();
+          } else {
+            new Notice(L.email_test_ok);
+          }
+        }
         catch (err) { new Notice(L.email_test_fail((err as Error).message)); }
         finally { b.setButtonText(L.email_test_btn).setDisabled(false); }
       })
