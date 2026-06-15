@@ -1,9 +1,9 @@
 {
   "id": "obsidian-signature",
   "name": "Signature",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "minAppVersion": "1.0.0",
-  "description": "Sign notes inline with name, role, timestamp and unique hash. Supports pt-BR ([assinatura]), English ([signature]) and Chinese ([签名]) trigger tags.",
+  "description": "Sign notes inline with tamper-proof hashes. Central de Assinaturas dashboard, admin roles, hash validation, detailed tamper reports. Tags: [assinatura], [signature], [签名].",
   "author": "Lucas Burati",
   "authorUrl": "https://github.com/lcsburati",
   "isDesktopOnly": true

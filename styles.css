@@ -1,6 +1,7 @@
 /* ══════════════════════════════════════════════════════
    obsidian-signature — stylesheet
-   Uses only Obsidian CSS variables for full theme compat.
+   Usa apenas variáveis CSS do Obsidian para compatibilidade
+   com qualquer tema.
    ══════════════════════════════════════════════════════ */
 
 /* ── Placeholder [signature] / [assinatura] / [签名] ──── */
@@ -16,73 +17,10 @@
 }
 
 .sig-placeholder:hover {
-  background-color: color-mix(in srgb, var(--text-accent) 20%, transparent);
+  background-color: color-mix(in srgb, var(--text-accent) 22%, transparent);
 }
 
-/* ── Modais ──────────────────────────────────────────── */
-
-.sig-modal { min-width: 340px; }
-
-.sig-modal-desc {
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
-  margin-bottom: var(--size-4-3);
-  padding: var(--size-4-2) var(--size-4-3);
-  background: var(--background-secondary);
-  border-radius: var(--radius-s);
-  border-left: 3px solid var(--text-accent);
-}
-
-.sig-pwd-field { min-width: 200px; }
-
-.sig-error {
-  color: var(--text-error);
-  font-size: var(--font-ui-small);
-  padding: var(--size-4-1) var(--size-4-2);
-  margin: calc(-1 * var(--size-4-2)) 0 var(--size-4-2);
-  background: color-mix(in srgb, var(--text-error) 8%, transparent);
-  border-radius: var(--radius-s);
-  border-left: 2px solid var(--text-error);
-}
-
-/* ── Modal: lista de assinantes ──────────────────────── */
-
-.sig-picker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--size-4-2);
-  min-width: 300px;
-}
-
-.sig-signer-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--size-4-3) var(--size-4-4);
-  border-radius: var(--radius-m);
-  border: 1px solid var(--background-modifier-border);
-  background: var(--background-secondary);
-  cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
-}
-
-.sig-signer-row:hover {
-  background: var(--background-modifier-hover);
-  border-color: var(--text-accent);
-}
-
-.sig-signer-name {
-  font-weight: 600;
-  font-size: var(--font-ui-medium);
-  color: var(--text-normal);
-}
-
-.sig-signer-role {
-  font-size: var(--font-ui-small);
-  color: var(--text-muted);
-}
-
-/* ── Assinaturas válidas ─────────────────────────────── */
+/* ── Assinaturas — estados visuais ───────────────────── */
 
 .sig-valid {
   color: var(--text-success, #16a34a);
@@ -90,8 +28,6 @@
   border-radius: 3px;
   padding: 1px 3px;
 }
-
-/* ── Assinaturas LOCK ────────────────────────────────── */
 
 .sig-locked {
   color: var(--text-accent);
@@ -103,8 +39,6 @@
   cursor: help;
 }
 
-/* ── Assinaturas ADULTERADAS ─────────────────────────── */
-
 .sig-tampered {
   color: var(--text-error);
   background-color: color-mix(in srgb, var(--text-error) 10%, transparent);
@@ -115,8 +49,6 @@
   cursor: help;
 }
 
-/* ── Assinaturas LEGADAS (formato antigo) ────────────── */
-
 .sig-legacy {
   color: var(--text-warning, #b45309);
   background-color: color-mix(in srgb, var(--text-warning, #b45309) 8%, transparent);
@@ -126,12 +58,378 @@
   cursor: help;
 }
 
-/* ── Settings: dica da tag ativa ─────────────────────── */
+/* ── Modais — base ───────────────────────────────────── */
+
+.sig-modal-desc {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin-bottom: var(--size-4-3);
+  padding: var(--size-4-2) var(--size-4-3);
+  background: var(--background-secondary);
+  border-radius: var(--radius-s);
+  border-left: 3px solid var(--text-accent);
+}
+
+.sig-error {
+  color: var(--text-error);
+  font-size: var(--font-ui-small);
+  padding: var(--size-4-1) var(--size-4-2);
+  margin-bottom: var(--size-4-2);
+  background: color-mix(in srgb, var(--text-error) 8%, transparent);
+  border-radius: var(--radius-s);
+  border-left: 2px solid var(--text-error);
+}
+
+/* ── Modal: Picker de assinante ──────────────────────── */
+
+.sig-picker-modal { min-width: 320px; }
+
+.sig-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  margin-top: var(--size-4-3);
+}
+
+.sig-picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  padding: var(--size-4-3) var(--size-4-4);
+  border-radius: var(--radius-m);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.sig-picker-row:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--text-accent);
+}
+
+.sig-picker-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sig-picker-name {
+  font-weight: 600;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+}
+
+.sig-picker-crown {
+  margin-left: 2px;
+  font-style: normal;
+}
+
+.sig-picker-role {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sig-picker-detail-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 1.1em;
+  line-height: 1;
+  transition: border-color 0.1s, color 0.1s;
+}
+
+.sig-picker-detail-btn:hover {
+  border-color: var(--text-accent);
+  color: var(--text-accent);
+}
+
+.sig-no-signers {
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  padding: var(--size-4-4) 0;
+}
+
+/* ── Modal: Detalhes (assinatura ou assinante) ─────────── */
+
+.sig-detail-modal,
+.sig-signer-detail-modal {
+  min-width: 360px;
+}
+
+.sig-detail-grid {
+  display: grid;
+  gap: var(--size-4-1) 0;
+  margin: var(--size-4-3) 0;
+}
+
+.sig-detail-row {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  gap: var(--size-4-2);
+  padding: var(--size-4-2) 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  align-items: start;
+}
+
+.sig-detail-row:last-child {
+  border-bottom: none;
+}
+
+.sig-detail-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sig-detail-value {
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  word-break: break-all;
+}
+
+.sig-detail-close {
+  display: block;
+  margin: var(--size-4-4) auto 0;
+}
+
+/* ── Modal: Validar por hash ─────────────────────────── */
+
+.sig-validate-modal { min-width: 440px; }
+
+.sig-validate-result {
+  margin-top: var(--size-4-2);
+  padding: var(--size-4-2) var(--size-4-3);
+  border-radius: var(--radius-s);
+  font-weight: 500;
+  min-height: 2em;
+}
+
+.sig-validate-ok {
+  color: var(--text-success, #16a34a);
+  background: color-mix(in srgb, var(--text-success, #16a34a) 10%, transparent);
+  border-left: 3px solid var(--text-success, #16a34a);
+}
+
+.sig-validate-fail {
+  color: var(--text-error);
+  background: color-mix(in srgb, var(--text-error) 10%, transparent);
+  border-left: 3px solid var(--text-error);
+}
+
+.sig-validate-warn {
+  color: var(--text-warning, #b45309);
+  background: color-mix(in srgb, var(--text-warning, #b45309) 10%, transparent);
+  border-left: 3px solid var(--text-warning, #b45309);
+}
+
+/* ── Central de Assinaturas (Dashboard View) ─────────── */
+
+.sig-dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sig-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--size-4-3) var(--size-4-4);
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.sig-dashboard-title {
+  font-weight: 700;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+}
+
+.sig-dashboard-refresh {
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.1s, color 0.1s;
+}
+
+.sig-dashboard-refresh:hover {
+  border-color: var(--text-accent);
+  color: var(--text-accent);
+}
+
+.sig-dashboard-filters {
+  padding: var(--size-4-2) var(--size-4-4);
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.sig-filter-select {
+  width: 100%;
+  font-size: var(--font-ui-small);
+}
+
+.sig-dashboard-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--size-4-2) var(--size-4-3);
+}
+
+.sig-dashboard-scanning,
+.sig-dashboard-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  text-align: center;
+  padding: var(--size-4-4) 0;
+  font-style: italic;
+}
+
+.sig-dashboard-file-block {
+  margin-bottom: var(--size-4-3);
+}
+
+.sig-dashboard-file-header {
+  padding: var(--size-4-1) var(--size-4-2);
+  margin-bottom: var(--size-4-1);
+}
+
+.sig-file-name {
+  font-weight: 600;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sig-dashboard-row {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto;
+  align-items: center;
+  gap: var(--size-4-2);
+  padding: var(--size-4-2) var(--size-4-3);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.sig-dashboard-row:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+}
+
+.sig-dashboard-row[data-status="tampered"]:hover {
+  border-color: color-mix(in srgb, var(--text-error) 40%, transparent);
+}
+
+.sig-row-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.sig-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sig-row-name {
+  font-weight: 600;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sig-row-role {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sig-row-date {
+  font-size: calc(var(--font-ui-small) - 1px);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.sig-row-status {
+  font-size: calc(var(--font-ui-small) - 1px);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Settings: abas (Assinantes / Gerenciador) ────────── */
+
+.sig-tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: var(--size-4-3) 0 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: var(--size-4-4);
+}
+
+.sig-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-ui-medium);
+  font-weight: 500;
+  padding: var(--size-4-2) var(--size-4-4);
+  margin-bottom: -1px;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.sig-tab-btn:hover {
+  color: var(--text-normal);
+}
+
+.sig-tab-btn.is-active {
+  color: var(--text-normal);
+  border-bottom-color: var(--interactive-accent);
+  font-weight: 600;
+}
+
+.sig-tab-body {
+  padding-top: var(--size-4-2);
+}
+
+/* ── Settings: hint da tag ativa ──────────────────────── */
 
 .sig-tag-hint {
   font-size: var(--font-ui-small);
   color: var(--text-muted);
-  margin: calc(-1 * var(--size-4-2)) 0 var(--size-4-3);
+  margin-bottom: var(--size-4-4);
 }
 
 .sig-tag-hint code {
@@ -141,7 +439,100 @@
   padding: 1px 5px;
 }
 
-/* ── Settings: aviso de segurança (email) ────────────── */
+/* ── Settings: bloco de assinante (expander) ──────────── */
+
+.sig-signer-block {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  margin-bottom: var(--size-4-2);
+  overflow: hidden;
+}
+
+/* Header clicável */
+.sig-signer-header {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3) var(--size-4-4);
+  cursor: pointer;
+  background: var(--background-secondary);
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.sig-signer-header:hover {
+  background: var(--background-modifier-hover);
+}
+
+.sig-signer-chevron {
+  color: var(--text-faint);
+  font-size: 1.1em;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.sig-signer-block.is-open .sig-signer-chevron {
+  transform: rotate(90deg);
+}
+
+.sig-signer-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sig-signer-header-name {
+  font-weight: 600;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sig-signer-header-role {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sig-signer-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sig-badge {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+/* Corpo — fechado por padrão */
+.sig-signer-body {
+  display: none;
+  padding: var(--size-4-2) var(--size-4-4) var(--size-4-3);
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.sig-signer-block.is-open .sig-signer-body {
+  display: block;
+}
+
+.sig-signer-sep {
+  border: none;
+  border-top: 1px solid var(--background-modifier-border);
+  margin: var(--size-4-3) 0 0;
+}
+
+/* ── Alertas de email (legado) ───────────────────────── */
 
 .sig-email-warning {
   font-size: var(--font-ui-small);
@@ -151,19 +542,4 @@
   border-radius: var(--radius-s);
   padding: var(--size-4-2) var(--size-4-3);
   margin-bottom: var(--size-4-3);
-}
-
-.sig-recipients-label {
-  font-weight: 600;
-  font-size: var(--font-ui-medium);
-  color: var(--text-normal);
-  margin: var(--size-4-3) 0 2px;
-}
-
-/* ── Botão final do modal alinhado à direita ─────────── */
-
-.sig-modal .setting-item:last-child {
-  border-top: none;
-  justify-content: flex-end;
-  padding-top: var(--size-4-2);
 }

@@ -8,6 +8,7 @@
  * Usage:
  *   node verify.mjs <file.md> [file2.md ...]
  *   node verify.mjs --dir <folder>        # validate all .md files in a folder
+ *   node verify.mjs --hash <idHash.contentHash> <file.md>  # validate single sig hash
  *   node verify.mjs --help
  *
  * Exit codes:
@@ -80,15 +81,21 @@ function parseSigs(text) {
 
 /**
  * Verify a single signature against the full document text.
- * Returns: 'valid' | 'tampered' | 'legacy'
+ * Returns: 'valid' | 'tampered-id' | 'tampered-content' | 'tampered' | 'legacy'
+ *   tampered-id      — só o hash de identidade (nome/cargo/ts) não confere
+ *   tampered-content — só o hash de conteúdo não confere (documento foi alterado)
+ *   tampered         — ambos os hashes não conferem
  */
 function verifySig(sig, fullText) {
   if (!sig.contentHash) return 'legacy';
   const expectedId = makeIdHash(sig.name, sig.role, sig.ts);
   const expectedContent = makeContentHash(fullText);
-  if (sig.idHash !== expectedId) return 'tampered';
-  if (sig.contentHash !== expectedContent) return 'tampered';
-  return 'valid';
+  const idOk      = sig.idHash      === expectedId;
+  const contentOk = sig.contentHash === expectedContent;
+  if (idOk && contentOk) return 'valid';
+  if (!idOk && !contentOk) return 'tampered';
+  if (!idOk) return 'tampered-id';
+  return 'tampered-content';
 }
 
 // ── Output helpers ────────────────────────────────────────────────────────────
@@ -130,12 +137,21 @@ function validateFile(filePath) {
       console.log(`  ${c(GREEN, '✓')} ${label}`);
       if (sig.isLock) console.log(`    ${c(CYAN, '→ Lock signature — document was read-only when signed')}`);
       valid++;
-    } else if (result === 'tampered') {
+    } else if (result.startsWith('tampered')) {
+      const expId      = makeIdHash(sig.name, sig.role, sig.ts);
+      const expContent = makeContentHash(text);
+      const idFailed      = result === 'tampered-id'      || result === 'tampered';
+      const contentFailed = result === 'tampered-content' || result === 'tampered';
+
+      const reason =
+        result === 'tampered-id'      ? 'identity hash mismatch'          :
+        result === 'tampered-content' ? 'content hash mismatch'           :
+                                        'both hashes mismatched';
+
       console.log(`  ${c(RED, '✗ TAMPERED')} ${label}`);
-      console.log(`    ${c(GRAY, 'Expected id hash   :')} ${makeIdHash(sig.name, sig.role, sig.ts)}`);
-      console.log(`    ${c(GRAY, 'Stored  id hash    :')} ${sig.idHash}${sig.idHash !== makeIdHash(sig.name, sig.role, sig.ts) ? c(RED, ' ← mismatch') : ''}`);
-      console.log(`    ${c(GRAY, 'Expected content   :')} ${makeContentHash(text)}`);
-      console.log(`    ${c(GRAY, 'Stored  content    :')} ${sig.contentHash}${sig.contentHash !== makeContentHash(text) ? c(RED, ' ← mismatch') : ''}`);
+      console.log(`    ${c(RED, `→ ${reason}`)}`);
+      console.log(`    ${c(GRAY, 'id hash   expected :')} ${expId}${idFailed      ? c(RED, ` ← stored: ${sig.idHash}`)      : c(GREEN, ' ✓')}`);
+      console.log(`    ${c(GRAY, 'content   expected :')} ${expContent}${contentFailed ? c(RED, ` ← stored: ${sig.contentHash}`) : c(GREEN, ' ✓')}`);
       tampered++;
     } else {
       console.log(`  ${c(YELLOW, '?')} ${label} ${c(GRAY, '(legacy format — no content hash)')}`);
@@ -152,26 +168,34 @@ const HELP = `
 ${c(BOLD, 'Obsidian Signature Validator')}
 
 Verifies the integrity of signatures in Markdown files.
-Uses the same algorithm as the Obsidian Signature plugin.
+Uses the same FNV-1a 32-bit algorithm as the Obsidian Signature plugin.
 
 ${c(BOLD, 'Usage:')}
   node verify.mjs <file.md> [file2.md ...]
   node verify.mjs --dir <folder>
+  node verify.mjs --hash <idHash.contentHash> <file.md>
   node verify.mjs --help
 
 ${c(BOLD, 'Output legend:')}
-  ${c(GREEN, '✓')}  Valid signature — document has not been modified after signing
-  ${c(RED, '✗')}  Tampered — document content changed after signing
-  ${c(YELLOW, '?')}  Legacy — signature created before tamper detection (no content hash)
+  ${c(GREEN, '✓')}  Valid — document not modified after signing
+  ${c(RED, '✗')}  Tampered — identity or content hash mismatch (detail shown per sig)
+  ${c(YELLOW, '?')}  Legacy — no content hash (cannot verify integrity)
 
 ${c(BOLD, 'Exit codes:')}
   0 — all signatures valid (or none found)
   1 — tampered signatures detected
   2 — only legacy signatures (cannot verify)
 
+${c(BOLD, 'Validate a specific hash (--hash):')}
+  Checks whether a given idHash.contentHash is consistent with a file's content.
+  Useful for verifying a signature you copied without loading Obsidian.
+
+  Example:
+    node verify.mjs --hash a3f2b1c4.e8d9f7a2 nota.md
+
 ${c(BOLD, 'Algorithm:')}
   id hash      = FNV-1a32(name + "|" + role + "|" + timestamp)
-  content hash = FNV-1a32(docText with all [SIG:...] blocks stripped, whitespace normalized)
+  content hash = FNV-1a32(docText with all [SIG:...] blocks and placeholders stripped)
   signature    = [PREFIX: name - role | timestamp | idHash.contentHash]
 `;
 
@@ -196,6 +220,42 @@ if (!args.length || args[0] === '--help' || args[0] === '-h') {
   console.log(HELP);
   process.exit(0);
 }
+
+// ── Subcomando --hash ─────────────────────────────────────────────────────────
+
+if (args[0] === '--hash') {
+  const hashArg = args[1];
+  const filePath = args[2];
+  if (!hashArg || !filePath) {
+    console.error(c(RED, 'Usage: node verify.mjs --hash <idHash.contentHash> <file.md>'));
+    process.exit(1);
+  }
+  const parts = hashArg.split('.');
+  if (parts.length !== 2 || !/^[a-f0-9]{8}$/.test(parts[0]) || !/^[a-f0-9]{8}$/.test(parts[1])) {
+    console.error(c(RED, `Invalid hash format: "${hashArg}". Expected: xxxxxxxx.xxxxxxxx`));
+    process.exit(1);
+  }
+  const [storedId, storedContent] = parts;
+  let text;
+  try { text = readFileSync(resolve(filePath), 'utf-8'); }
+  catch (e) { console.error(c(RED, `Cannot read file: ${filePath}`)); process.exit(1); }
+
+  const actualContent = makeContentHash(text);
+  console.log(`\n${c(BOLD, 'Hash Validation')}`);
+  console.log(`  File            : ${filePath}`);
+  console.log(`  Input hash      : ${hashArg}`);
+  console.log(`  Content hash    : ${storedContent}  →  computed: ${actualContent}`);
+
+  if (actualContent === storedContent) {
+    console.log(`\n  ${c(GREEN, '✅ Content hash matches — document is authentic.')}\n`);
+    process.exit(0);
+  } else {
+    console.log(`\n  ${c(RED, '❌ Content hash MISMATCH — document may have been altered.')}\n`);
+    process.exit(1);
+  }
+}
+
+// ── Modos normais ─────────────────────────────────────────────────────────────
 
 let targets = [];
 if (args[0] === '--dir') {

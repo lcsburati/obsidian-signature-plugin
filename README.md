@@ -1,211 +1,187 @@
-# Obsidian Signature Plugin
+# Obsidian Signature — Plugin de Assinatura Digital
 
-> ⚠️ **AI-generated project** — Built entirely by an AI assistant (Claude, by Anthropic), guided only by human direction and requirements. No manual code was written. The concept, feature decisions, and testing were provided by the human author.
+**Versão 2.0.0** · Autor: Lucas Burati · Desktop only
 
-Sign notes inline with name, role, timestamp and a verifiable hash — for internal control and accountability. Signatures are cryptographically tied to the document content: any external edit is automatically detected.
-
----
-
-## Features
-
-- **Multilingual trigger tags** — each language has its own tag:
-  - English: `[signature]` → `[SIGNED: Name - Role | 2026-06-14 10:30 | a1b2c3d4.e5f67890]`
-  - Portuguese: `[assinatura]` → `[ASSINADO: Nome - Cargo | 2026-06-14 10:30 | a1b2c3d4.e5f67890]`
-  - Chinese: `[签名]` → `[已签名: 姓名 - 职位 | 2026-06-14 10:30 | a1b2c3d4.e5f67890]`
-- **All tags detected universally** — any tag works regardless of language setting
-- **Content-aware hash** — signature hash commits to the document content; any edit after signing is detectable
-- **Tamper detection** — visual indicators on signatures (green = valid, red = tampered, yellow = legacy)
-- **Auto-verify on file open** — detects tampering as soon as you open a note in Obsidian
-- **Lock mode per signer** — a lock signer makes the entire document read-only in Obsidian
-- **External validation** — standalone `verify.mjs` script to validate signatures outside Obsidian
-- **Password protection per signer** — optional; stored as FNV-1a hash (not recoverable)
-- **Email notifications via SMTP** — on signature applied and/or on tamper detected
-- **3-language interface** — English, Português (pt-BR), 中文
+Assina notas inline com nome, cargo, timestamp e hashes de integridade. Detecta adulterações com precisão — apontando exatamente qual assinatura falhou e por quê.
 
 ---
 
-## Signature Format
+## Como funciona
+
+### Assinar uma nota
+
+Digite uma das tags de placeholder em qualquer ponto do documento:
+
+| Idioma | Tag |
+|--------|-----|
+| Português | `[assinatura]` |
+| Inglês | `[signature]` |
+| Chinês | `[签名]` |
+
+Clique na tag. Se houver mais de um assinante configurado, o picker aparece. Se houver senha, ela é solicitada (não: a senha não é necessária para assinar, apenas para remover).
+
+A tag é substituída por um bloco como:
 
 ```
-[SIGNED: Name - Role | 2026-06-14 10:30 | idHash.contentHash]
+[ASSINADO: Lucas Burati - Gerente | 2026-06-15 14:32 | a3f2b1c4.e8d9f7a2]
 ```
 
-| Field | Value |
-|-------|-------|
-| `idHash` | `FNV-1a32(name + "\|" + role + "\|" + timestamp)` — commits to the signer identity |
-| `contentHash` | `FNV-1a32(docText with all signatures stripped, whitespace normalized)` — commits to the document content |
+O bloco contém dois hashes FNV-1a 32-bit:
+- **idHash** (`a3f2b1c4`) — hash de identidade: `fnv32a(nome + "|" + cargo + "|" + timestamp)`
+- **contentHash** (`e8d9f7a2`) — hash de conteúdo: `fnv32a(texto do documento sem assinaturas)`
 
-**Lock signatures** use the `LOCKED` prefix and make the document read-only:
-```
-[LOCKED: Name - Role | 2026-06-14 10:30 | idHash.contentHash]
-```
+Qualquer alteração no documento após a assinatura invalida o `contentHash`.
 
----
+### Modo LOCK
 
-## Visual Indicators (in Obsidian editor)
-
-| Color | Meaning |
-|-------|---------|
-| 🟢 Green | Signature valid — document unchanged since signing |
-| 🔵 Purple/underline | Lock signature active — document is read-only |
-| 🔴 Red + strikethrough | **Tampered** — document was edited after signing |
-| 🟡 Yellow/dashed | Legacy format — no content hash, cannot verify |
-
-Hover over any signature to see a tooltip with the status.
+Se o assinante tiver **"Bloquear ao assinar"** ativado, o bloco usa o prefixo `[BLOQUEADO: ...]` / `[LOCKED: ...]`. Um documento com qualquer LOCK válido fica completamente bloqueado para edição — nenhuma tecla funciona.
 
 ---
 
-## External Validation
+## Comandos
 
-Validate signatures from the command line — no Obsidian needed:
+| Comando | O que faz |
+|---------|-----------|
+| `Verificar assinaturas da nota atual` | Verifica todas as assinaturas e lista **qual** falhou e **por quê** (hash de identidade? hash de conteúdo? ambos?) |
+| `Remover assinatura na posição do cursor` | Remove a assinatura sob o cursor. Solicita senha se o assinante for protegido. |
+| `Abrir Central de Assinaturas` | Abre o painel lateral com todas as assinaturas do vault e seus status |
+| `Validar assinatura por hash` | Abre modal para validar um par de hashes manualmente contra um conteúdo |
 
-```bash
-# Single file
-node verify.mjs note.md
+---
 
-# Multiple files
-node verify.mjs doc1.md doc2.md doc3.md
+## Validação por hash
 
-# Entire folder
-node verify.mjs --dir /path/to/vault
+Use o comando **"Validar assinatura por hash"** quando quiser verificar uma assinatura fora do contexto da nota original.
+
+**Inputs:**
+1. O par de hashes da assinatura: `xxxxxxxx.xxxxxxxx` (copiado diretamente do bloco `[ASSINADO: ...]`)
+2. O conteúdo do documento **sem** as assinaturas (cole o texto puro)
+
+**O que é verificado:** o plugin recalcula `fnv32a(stripSignatures(conteúdo))` e compara com o `contentHash` da assinatura. Se conferir, o documento não foi alterado desde a assinatura.
+
+> **Nota:** o `idHash` identifica o assinante/momento mas não pode ser re-verificado sem saber o timestamp exato — use o `contentHash` para validar integridade.
+
+---
+
+## Central de Assinaturas
+
+Clique no ícone 🖊 na ribbon ou use o comando **"Abrir Central de Assinaturas"** para abrir o painel lateral.
+
+O painel escaneia todos os arquivos Markdown do vault e lista cada assinatura com:
+
+| Coluna | Conteúdo |
+|--------|----------|
+| Ícone | ✅ Válida · ❌ Adulterada · ⚠️ Legado · 🔒 Bloqueada |
+| Nome e cargo | Do assinante |
+| Data | Timestamp da assinatura |
+| Status | Textual |
+
+**Clique em qualquer linha** → abre a nota correspondente e exibe um modal com todos os detalhes da assinatura (hashes, arquivo, status completo).
+
+**Filtro de status** no topo permite ver só as adulteradas, legadas, etc.
+
+**Botão ↺** atualiza o scan do vault.
+
+---
+
+## Relatório de adulteração
+
+Quando a verificação detecta adulteração, o aviso mostra exatamente o problema de cada assinatura:
+
 ```
-
-**Output:**
-```
-note.md
-  ✓ Lucas Burati — Developer | 2026-06-14 10:30
-  ✗ TAMPERED Alice — Manager | 2026-06-13 09:00
-    Expected content hash: 2963b0de
-    Stored  content hash : cefeb018 ← mismatch
-
-─── Summary ───
-  Files with signatures : 1
-  ✓ Valid              : 1
-  ✗ Tampered           : 1
-```
-
-**Exit codes:** `0` = all valid · `1` = tampered found · `2` = only legacy (unverifiable)
-
-### How to verify manually
-
-The algorithm is simple enough to implement in any language:
-
-```js
-// FNV-1a 32-bit
-function shortHash(input) {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h.toString(16).padStart(8, '0');
-}
-
-// Strip signature blocks and normalize whitespace
-function stripSigs(text) {
-  return text
-    .replace(/\[(ASSINADO|SIGNED|已签名|BLOQUEADO|LOCKED|已锁定): [^\]]+\]/g, '')
-    .replace(/\[(assinatura|signature|签名)\]/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// Given a signature and the full document text:
-const expectedIdHash      = shortHash(name + '|' + role + '|' + timestamp);
-const expectedContentHash = shortHash(stripSigs(fullDocumentText));
-const isValid = storedIdHash === expectedIdHash && storedContentHash === expectedContentHash;
+❌ 2 assinatura(s) adulterada(s)!
+  • Lucas Burati (Gerente): hash de conteúdo inválido
+  • Maria Santos (Diretora): ambos os hashes inválidos
 ```
 
----
-
-## Lock Mode
-
-Enable **"Lock file on sign"** for a signer in Settings. When that signer applies a signature:
-- The prefix becomes `LOCKED` instead of `SIGNED`
-- The entire document becomes **read-only** in Obsidian's editor (CM6 transaction filter blocks all changes)
-- To edit again: **Command Palette → "Remove signature at cursor"** (requires password if set)
-- External edits to the `.md` file are still detectable via tamper detection
+Tipos de falha possíveis:
+- **hash de identidade inválido** — o nome/cargo/timestamp foi alterado dentro do bloco
+- **hash de conteúdo inválido** — o corpo do documento foi alterado após a assinatura
+- **ambos os hashes inválidos** — bloco e conteúdo foram modificados
 
 ---
 
-## Installation (manual)
+## Configurações
 
-1. Download or build `main.js`, `manifest.json`, and `styles.css`
-2. Copy to `<your-vault>/.obsidian/plugins/obsidian-signature/`
-3. In Obsidian: **Settings → Community plugins → turn off Restricted mode → enable Signature**
+### Assinantes
 
-### Build from source
+Cada assinante tem:
 
-```bash
-npm install --legacy-peer-deps
-npm run build
+| Campo | Descrição |
+|-------|-----------|
+| Nome | Aparece no bloco de assinatura |
+| Cargo | Aparece no bloco de assinatura |
+| Senha (opcional) | Se definida, é exigida para remover a assinatura |
+| **Administrador** | Acesso à Central e permissão para remover qualquer assinatura |
+| **Bloquear ao assinar** | Usa prefixo LOCKED e trava o documento |
+
+### Verificar ao abrir
+
+Se ativado, cada nota aberta é verificada automaticamente. Adulterações geram um aviso imediato com detalhes.
+
+### Alertas por e-mail
+
+Configure SMTP para receber alertas automáticos quando adulterações forem detectadas ao abrir arquivos. Requer servidor SMTP acessível localmente.
+
+---
+
+## Formato dos blocos de assinatura
+
+```
+[ASSINADO: Nome - Cargo | YYYY-MM-DD HH:MM | idHash.contentHash]
+[BLOQUEADO: Nome - Cargo | YYYY-MM-DD HH:MM | idHash.contentHash]
 ```
 
-> ⚠️ The `node_modules` directory is platform-specific. If you move files between Windows and macOS/Linux, run `npm install --legacy-peer-deps` again on the destination machine before building.
+**Retrocompatibilidade:** blocos do formato antigo (sem `contentHash`) são reconhecidos como `⚠️ Legado` — exibidos sem erro, mas sem verificação de integridade.
 
 ---
 
-## Usage
+## Algoritmo de hash
 
-1. Write `[signature]` anywhere in a note
-2. Click the highlighted text in the editor
-3. If multiple signers are configured, select one
-4. If the signer has a password, confirm it (max 3 attempts)
-5. The tag is replaced inline with the full signature block
+```
+fnv32a(str):
+  hash = 2166136261  (FNV offset basis)
+  para cada char:
+    hash ^= charCode
+    hash *= 16777619  (FNV prime)
+    hash &= 0xFFFFFFFF
+  retorna hash em hex (8 chars)
 
-To **remove** a signature: place cursor on the signature line → **Command Palette → "Remove signature at cursor"**
+idHash      = fnv32a(nome + "|" + cargo + "|" + timestamp)
+contentHash = fnv32a(documento com assinaturas e placeholders removidos)
+```
 
-To **verify**: **Command Palette → "Verify signatures in current note"**
-
----
-
-## Settings
-
-Open **Settings → Signature**:
-
-| Section | What it does |
-|---------|-------------|
-| Language | Switch interface: English, pt-BR, 中文 |
-| Verify on open | Auto-check signatures every time a note is opened |
-| Signers | Add name, role, optional password, lock mode toggle |
-| Email Notifications | SMTP config, recipients, tamper alerts |
+> FNV-1a 32-bit é rápido e suficiente para detecção de adulteração informal. Para uso jurídico ou segurança crítica, considere SHA-256.
 
 ---
 
-## Email Notifications
+## Compatibilidade de idiomas
 
-- Sends email on signature applied (if enabled)
-- Sends tamper alert email on file open if tampering is detected (separate toggle)
-- Supports any SMTP server (Gmail, Outlook, custom)
-- For Gmail: use an **App Password** at `myaccount.google.com → Security → App passwords`
-- Test connection with **"Send test email"** — automatically enables notifications on success
+Os prefixos reconhecidos no parse são:
 
-> ⚠️ SMTP password stored as plain text in `data.json`. Use an App Password. `data.json` is in `.gitignore`.
+| Prefixo | Idioma |
+|---------|--------|
+| `ASSINADO` / `BLOQUEADO` | Português |
+| `SIGNED` / `LOCKED` | Inglês |
+| `已签名` / `已锁定` | Chinês |
 
----
-
-## Security Notes
-
-- Signer passwords: **FNV-1a 32-bit hashes** — not reversible, not recoverable
-- Signature hashes: FNV-1a 32-bit — lightweight, not cryptographically strong (suitable for internal control, not legal/forensic use)
-- Lock mode blocks edits **within Obsidian** only — external `.md` edits are possible but detectable via content hash
-- This plugin provides **internal control and accountability**, not legally valid signatures
+O idioma dos novos blocos gerados segue a configuração de **Idioma** nas configurações.
 
 ---
 
-## Tech Stack
+## Changelog
 
-TypeScript · esbuild · CodeMirror 6 (via Obsidian) · nodemailer
+### v2.0.0
+- **Central de Assinaturas**: painel lateral com todas as assinaturas do vault, filtro por status, clique para navegar e ver detalhes
+- **Validação detalhada**: relatório de adulteração aponta qual hash falhou (identidade, conteúdo ou ambos) por assinatura
+- **Conceito de Admin**: toggle por assinante; admins têm acesso ao dashboard e podem remover qualquer assinatura
+- **Modal de detalhes do assinante**: picker compacto com botão `···` para ver detalhes sem poluir a lista
+- **Comando "Validar por hash"**: valida uma assinatura colando os hashes e o conteúdo manualmente
+- **Verificação ao abrir**: relatório detalhado também ao abrir notas automaticamente
+- Ícone na ribbon para acesso rápido à Central
 
----
-
-## Other Languages
-
-- [Português (pt-BR)](README.pt-BR.md)
-- [中文](README.zh.md)
-
----
-
-## AI Attribution
-
-This plugin was conceived and directed by **Lucas Burati** and implemented entirely by **Claude** (Anthropic's AI assistant). All code, architecture, and documentation were AI-generated based on human requirements and feedback. No line of code was written manually.
+### v1.0.0
+- Assinatura inline com FNV-1a (idHash + contentHash)
+- Suporte a LOCK (bloqueio de documento)
+- Verificação manual por comando
+- Suporte a pt-BR, en, zh
