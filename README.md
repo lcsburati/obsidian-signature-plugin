@@ -1,187 +1,204 @@
-# Obsidian Signature — Plugin de Assinatura Digital
+# Obsidian Signature
 
-**Versão 2.0.0** · Autor: Lucas Burati · Desktop only
+> ⚠️ **AI-generated project** — This plugin was built entirely by an AI assistant (Claude, by Anthropic), guided by human direction and requirements only. No code was written manually. The concept, feature decisions, and testing were provided by the human author.
 
-Assina notas inline com nome, cargo, timestamp e hashes de integridade. Detecta adulterações com precisão — apontando exatamente qual assinatura falhou e por quê.
+Sign notes inline with tamper-proof hashes. Detects tampering with precision — pointing out exactly which signature failed and why.
 
 ---
 
-## Como funciona
+## Installation via BRAT
 
-### Assinar uma nota
+1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) from the Obsidian community store.
+2. Open BRAT settings → **Add Beta Plugin**.
+3. Paste: `https://github.com/lcsburati/obsidian-sinature-plugin`
+4. Click **Add Plugin** — BRAT will install and keep it updated automatically.
 
-Digite uma das tags de placeholder em qualquer ponto do documento:
+---
 
-| Idioma | Tag |
-|--------|-----|
-| Português | `[assinatura]` |
-| Inglês | `[signature]` |
-| Chinês | `[签名]` |
+## How it works
 
-Clique na tag. Se houver mais de um assinante configurado, o picker aparece. Se houver senha, ela é solicitada (não: a senha não é necessária para assinar, apenas para remover).
+### Signing a note
 
-A tag é substituída por um bloco como:
+Type one of the placeholder tags anywhere in the document:
+
+| Language | Tag |
+|----------|-----|
+| Portuguese | `[assinatura]` |
+| English | `[signature]` |
+| Chinese | `[签名]` |
+
+Click the tag. If more than one signer is configured, the picker appears. The tag is replaced by a block like:
 
 ```
-[ASSINADO: Lucas Burati - Gerente | 2026-06-15 14:32 | a3f2b1c4.e8d9f7a2]
+[SIGNED: Lucas Burati - Manager | 2026-06-15 14:32 | a3f2b1c4.e8d9f7a2]
 ```
 
-O bloco contém dois hashes FNV-1a 32-bit:
-- **idHash** (`a3f2b1c4`) — hash de identidade: `fnv32a(nome + "|" + cargo + "|" + timestamp)`
-- **contentHash** (`e8d9f7a2`) — hash de conteúdo: `fnv32a(texto do documento sem assinaturas)`
+The block contains two FNV-1a 32-bit hashes:
+- **idHash** (`a3f2b1c4`) — identity hash: `fnv32a(name + "|" + role + "|" + timestamp)`
+- **contentHash** (`e8d9f7a2`) — content hash: `fnv32a(document text with all signatures stripped)`
 
-Qualquer alteração no documento após a assinatura invalida o `contentHash`.
+Any change to the document after signing invalidates the `contentHash`.
 
-### Modo LOCK
+### LOCK mode
 
-Se o assinante tiver **"Bloquear ao assinar"** ativado, o bloco usa o prefixo `[BLOQUEADO: ...]` / `[LOCKED: ...]`. Um documento com qualquer LOCK válido fica completamente bloqueado para edição — nenhuma tecla funciona.
-
----
-
-## Comandos
-
-| Comando | O que faz |
-|---------|-----------|
-| `Verificar assinaturas da nota atual` | Verifica todas as assinaturas e lista **qual** falhou e **por quê** (hash de identidade? hash de conteúdo? ambos?) |
-| `Remover assinatura na posição do cursor` | Remove a assinatura sob o cursor. Solicita senha se o assinante for protegido. |
-| `Abrir Central de Assinaturas` | Abre o painel lateral com todas as assinaturas do vault e seus status |
-| `Validar assinatura por hash` | Abre modal para validar um par de hashes manualmente contra um conteúdo |
+If the signer has **"Lock document on sign"** enabled, the block uses the `[LOCKED: ...]` prefix. A document with any valid LOCK signature becomes completely read-only — no edits are possible until the signature is removed.
 
 ---
 
-## Validação por hash
+## Commands
 
-Use o comando **"Validar assinatura por hash"** quando quiser verificar uma assinatura fora do contexto da nota original.
+| Command | What it does |
+|---------|-------------|
+| `Verify signatures in current note` | Checks all signatures and reports **which** one failed and **why** (identity hash? content hash? both?) |
+| `Remove signature at cursor` | Removes the signature under the cursor. Prompts for password if the signer is protected. |
+| `Open Signature Dashboard` | Opens the sidebar panel listing all signatures across the vault with their status |
+| `Validate signature by hash` | Opens a modal to manually validate a hash pair against pasted content |
+
+---
+
+## Signature Dashboard
+
+Click the 🖊 ribbon icon or use **"Open Signature Dashboard"** to open the sidebar panel.
+
+The panel scans all Markdown files in the vault and lists each signature with:
+
+| Column | Content |
+|--------|---------|
+| Icon | ✅ Valid · ❌ Tampered · ⚠️ Legacy · 🔒 Locked |
+| Name & role | From the signer |
+| Date | Signature timestamp |
+| Status | Text label |
+
+**Click any row** → opens the corresponding note and shows a detail modal with all signature info (hashes, file, full status).
+
+**Status filter** at the top lets you view only tampered, legacy, etc.
+
+**↺ button** refreshes the vault scan.
+
+---
+
+## Tamper report
+
+When verification detects tampering, the notice shows exactly what failed for each signature:
+
+```
+❌ 2 tampered signature(s)!
+  • Lucas Burati (Manager): content hash mismatch
+  • Maria Santos (Director): both hashes mismatched
+```
+
+Possible failure types:
+- **identity hash mismatch** — name/role/timestamp was altered inside the block
+- **content hash mismatch** — document body was changed after signing
+- **both hashes mismatched** — both the block and the content were modified
+
+---
+
+## Hash validation
+
+Use **"Validate signature by hash"** to verify a signature outside the original note context.
 
 **Inputs:**
-1. O par de hashes da assinatura: `xxxxxxxx.xxxxxxxx` (copiado diretamente do bloco `[ASSINADO: ...]`)
-2. O conteúdo do documento **sem** as assinaturas (cole o texto puro)
+1. The hash pair: `xxxxxxxx.xxxxxxxx` (copied directly from the `[SIGNED: ...]` block)
+2. The document content **without** signatures (paste the plain text)
 
-**O que é verificado:** o plugin recalcula `fnv32a(stripSignatures(conteúdo))` e compara com o `contentHash` da assinatura. Se conferir, o documento não foi alterado desde a assinatura.
+The plugin recomputes `fnv32a(stripSignatures(content))` and compares it to the stored `contentHash`.
 
-> **Nota:** o `idHash` identifica o assinante/momento mas não pode ser re-verificado sem saber o timestamp exato — use o `contentHash` para validar integridade.
-
----
-
-## Central de Assinaturas
-
-Clique no ícone 🖊 na ribbon ou use o comando **"Abrir Central de Assinaturas"** para abrir o painel lateral.
-
-O painel escaneia todos os arquivos Markdown do vault e lista cada assinatura com:
-
-| Coluna | Conteúdo |
-|--------|----------|
-| Ícone | ✅ Válida · ❌ Adulterada · ⚠️ Legado · 🔒 Bloqueada |
-| Nome e cargo | Do assinante |
-| Data | Timestamp da assinatura |
-| Status | Textual |
-
-**Clique em qualquer linha** → abre a nota correspondente e exibe um modal com todos os detalhes da assinatura (hashes, arquivo, status completo).
-
-**Filtro de status** no topo permite ver só as adulteradas, legadas, etc.
-
-**Botão ↺** atualiza o scan do vault.
-
----
-
-## Relatório de adulteração
-
-Quando a verificação detecta adulteração, o aviso mostra exatamente o problema de cada assinatura:
-
-```
-❌ 2 assinatura(s) adulterada(s)!
-  • Lucas Burati (Gerente): hash de conteúdo inválido
-  • Maria Santos (Diretora): ambos os hashes inválidos
+**CLI alternative** — use `verify.mjs` without opening Obsidian:
+```bash
+node verify.mjs note.md
+node verify.mjs --dir ./vault
+node verify.mjs --hash a3f2b1c4.e8d9f7a2 note.md
 ```
 
-Tipos de falha possíveis:
-- **hash de identidade inválido** — o nome/cargo/timestamp foi alterado dentro do bloco
-- **hash de conteúdo inválido** — o corpo do documento foi alterado após a assinatura
-- **ambos os hashes inválidos** — bloco e conteúdo foram modificados
+---
+
+## Settings
+
+Settings are split into two tabs:
+
+### ✍️ Signers tab
+
+Each signer has a collapsible card (closed by default). Click to expand:
+
+| Field | Description |
+|-------|-------------|
+| Name | Displayed in the signature block |
+| Role | Displayed in the signature block |
+| Password (optional) | If set, required to remove the signature |
+| **Administrator** | Access to the Dashboard and permission to remove any signature |
+| **Lock on sign** | Uses LOCKED prefix and makes the document read-only |
+
+Password management uses separate modals: Set / Change (requires current password) / Remove (requires current password).
+
+### ⚙️ Manager tab
+
+- **Language** — pt-BR / English / 中文
+- **Verify on open** — automatically check signatures when opening any note
+- **Email notifications** — SMTP config with individual recipient rows (add/remove per address) and tamper alert toggle
 
 ---
 
-## Configurações
-
-### Assinantes
-
-Cada assinante tem:
-
-| Campo | Descrição |
-|-------|-----------|
-| Nome | Aparece no bloco de assinatura |
-| Cargo | Aparece no bloco de assinatura |
-| Senha (opcional) | Se definida, é exigida para remover a assinatura |
-| **Administrador** | Acesso à Central e permissão para remover qualquer assinatura |
-| **Bloquear ao assinar** | Usa prefixo LOCKED e trava o documento |
-
-### Verificar ao abrir
-
-Se ativado, cada nota aberta é verificada automaticamente. Adulterações geram um aviso imediato com detalhes.
-
-### Alertas por e-mail
-
-Configure SMTP para receber alertas automáticos quando adulterações forem detectadas ao abrir arquivos. Requer servidor SMTP acessível localmente.
-
----
-
-## Formato dos blocos de assinatura
+## Signature block format
 
 ```
-[ASSINADO: Nome - Cargo | YYYY-MM-DD HH:MM | idHash.contentHash]
-[BLOQUEADO: Nome - Cargo | YYYY-MM-DD HH:MM | idHash.contentHash]
+[SIGNED: Name - Role | YYYY-MM-DD HH:MM | idHash.contentHash]
+[LOCKED: Name - Role | YYYY-MM-DD HH:MM | idHash.contentHash]
 ```
 
-**Retrocompatibilidade:** blocos do formato antigo (sem `contentHash`) são reconhecidos como `⚠️ Legado` — exibidos sem erro, mas sem verificação de integridade.
+**Backward compatibility:** blocks in the old format (no `contentHash`) are recognized as `⚠️ Legacy` — displayed without error but without integrity verification.
 
 ---
 
-## Algoritmo de hash
+## Hash algorithm
 
 ```
 fnv32a(str):
-  hash = 2166136261  (FNV offset basis)
-  para cada char:
+  hash = 2166136261       // FNV offset basis
+  for each char:
     hash ^= charCode
-    hash *= 16777619  (FNV prime)
+    hash *= 16777619      // FNV prime
     hash &= 0xFFFFFFFF
-  retorna hash em hex (8 chars)
+  return hash.toString(16).padStart(8, '0')
 
-idHash      = fnv32a(nome + "|" + cargo + "|" + timestamp)
-contentHash = fnv32a(documento com assinaturas e placeholders removidos)
+idHash      = fnv32a(name + "|" + role + "|" + timestamp)
+contentHash = fnv32a(document with all signature blocks and placeholders stripped)
 ```
 
-> FNV-1a 32-bit é rápido e suficiente para detecção de adulteração informal. Para uso jurídico ou segurança crítica, considere SHA-256.
+> FNV-1a 32-bit is fast and sufficient for informal tamper detection. For legal or security-critical use, consider SHA-256.
 
 ---
 
-## Compatibilidade de idiomas
+## Language support
 
-Os prefixos reconhecidos no parse são:
+Recognized prefixes in parsing:
 
-| Prefixo | Idioma |
-|---------|--------|
-| `ASSINADO` / `BLOQUEADO` | Português |
-| `SIGNED` / `LOCKED` | Inglês |
-| `已签名` / `已锁定` | Chinês |
+| Prefix | Language |
+|--------|----------|
+| `ASSINADO` / `BLOQUEADO` | Portuguese |
+| `SIGNED` / `LOCKED` | English |
+| `已签名` / `已锁定` | Chinese |
 
-O idioma dos novos blocos gerados segue a configuração de **Idioma** nas configurações.
+The language for new blocks follows the **Language** setting.
 
 ---
 
 ## Changelog
 
 ### v2.0.0
-- **Central de Assinaturas**: painel lateral com todas as assinaturas do vault, filtro por status, clique para navegar e ver detalhes
-- **Validação detalhada**: relatório de adulteração aponta qual hash falhou (identidade, conteúdo ou ambos) por assinatura
-- **Conceito de Admin**: toggle por assinante; admins têm acesso ao dashboard e podem remover qualquer assinatura
-- **Modal de detalhes do assinante**: picker compacto com botão `···` para ver detalhes sem poluir a lista
-- **Comando "Validar por hash"**: valida uma assinatura colando os hashes e o conteúdo manualmente
-- **Verificação ao abrir**: relatório detalhado também ao abrir notas automaticamente
-- Ícone na ribbon para acesso rápido à Central
+- **Signature Dashboard** — sidebar panel scanning the entire vault, status filter, click to navigate and view details
+- **Precise tamper report** — points to which hash failed (identity, content, or both) per signer
+- **Admin concept** — per-signer toggle; admins access the dashboard and can remove any signature
+- **Signer detail modal** — compact picker with `···` button to view details without cluttering the list
+- **"Validate by hash" command** — validate a signature by pasting hashes and content manually
+- **Detailed verify-on-open** — same precise report when opening notes automatically
+- **Settings tabs** — Signers / Manager split; signers use collapsible cards with status badges
+- **Email recipients** — individual rows with remove button, restored from v1
+- **verify.mjs** — new `--hash` subcommand, distinguishes tampered-id vs tampered-content
+- Ribbon icon for quick Dashboard access
 
 ### v1.0.0
-- Assinatura inline com FNV-1a (idHash + contentHash)
-- Suporte a LOCK (bloqueio de documento)
-- Verificação manual por comando
-- Suporte a pt-BR, en, zh
+- Inline signing with FNV-1a (idHash + contentHash)
+- LOCK mode (document read-only after signing)
+- Manual verify command
+- pt-BR, en, zh support
