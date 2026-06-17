@@ -6,6 +6,20 @@ Assine notas inline com hashes à prova de adulteração. Detecta modificações
 
 ---
 
+## Por que este plugin existe
+
+Estamos passando por um período de padronização de documentações. Como parte desse processo, surgiu a necessidade de um sistema confiável para rastrear **quem realizou o quê, se foi revisado pela liderança, e quem refatorou a documentação** quando necessário.
+
+Usamos o Obsidian como base de conhecimento compartilhada porque ele se mapeia naturalmente a uma pasta em um servidor compartilhado — toda a equipe consegue ler e editar notas sem atrito, e funciona bem com fluxos de trabalho assistidos por IA.
+
+O problema era a rastreabilidade: um arquivo Markdown diz o que mudou, mas não *quem aprovou* ou *se passou por revisão*. Soluções tradicionais (exportações em PDF, Word com controle de alterações, ferramentas externas de assinatura) são pesadas demais para um fluxo de documentação ágil.
+
+Este plugin resolve isso incorporando assinaturas inline diretamente na nota. Cada assinatura captura a identidade do assinante, o timestamp e um hash do conteúdo do documento no momento da assinatura. Se o documento for modificado após a assinatura, o hash deixa de bater — tornando qualquer alteração pós-assinatura imediatamente visível.
+
+**Essas assinaturas não têm valor jurídico.** Seu valor é prático: elas criam uma trilha de auditoria leve diretamente dentro da documentação, deixando claro de uma olhada quem tocou em um documento, em qual papel, e se o conteúdo foi alterado desde que a pessoa assinou.
+
+---
+
 ## Instalação via BRAT
 
 1. Instale o [plugin BRAT](https://github.com/TfTHacker/obsidian42-brat) pela loja de plugins do Obsidian.

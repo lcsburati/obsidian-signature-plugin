@@ -6,6 +6,20 @@ Sign notes inline with tamper-proof hashes. Detects tampering with precision —
 
 ---
 
+## Why this plugin exists
+
+Our team is going through a period of documentation standardization. As part of that process, we needed a reliable way to track **who wrote what, whether leadership reviewed it, and who refactored the documentation** when changes were required.
+
+We use Obsidian as our shared knowledge base because it maps naturally to a folder on a shared server — everyone on the team can read and edit notes without friction, and it plays well with AI-assisted workflows.
+
+The problem was accountability: a Markdown file tells you what changed, but not *who approved it* or *whether it went through review*. Traditional solutions (PDF exports, Word with tracked changes, external signing tools) are too heavy for a fast-moving documentation workflow.
+
+This plugin solves that by embedding lightweight inline signatures directly in the note. Each signature captures the signer's identity, timestamp, and a hash of the document content at the time of signing. If the document is modified after signing, the hash no longer matches — making any post-signature change immediately visible.
+
+**These signatures carry no legal weight.** Their value is practical: they create a lightweight audit trail directly inside the documentation, making it clear at a glance who touched a document, in what role, and whether the content has changed since they signed off on it.
+
+---
+
 ## Installation via BRAT
 
 1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) from the Obsidian community store.
